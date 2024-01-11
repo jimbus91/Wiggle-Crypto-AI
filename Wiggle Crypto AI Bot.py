@@ -55,7 +55,7 @@ gmt = pytz.timezone('Etc/GMT+7')
 # Candlestick plot
 candlestick_ohlc(ax[0], wiggle_data_ohlc.values, width=0.005, colorup='green', colordown='red')
 ax[0].yaxis.set_major_formatter(mticker.FormatStrFormatter('%d'))  # set y-axis formatter
-ax[0].set_title(f'{crypto} Candlestick Plot')
+ax[0].set_title(f'{crypto.upper()} Candlestick Plot')
 ax[0].set_ylabel('Price')
 ax[0].xaxis_date()
 ax[0].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M', tz=gmt))
@@ -71,7 +71,7 @@ wiggle_data_no_yellow = wiggle_data.loc[wiggle_data['signal'] != 0]
 ax[1].scatter(wiggle_data_no_yellow.index, wiggle_data_no_yellow['wiggle'], c=wiggle_data_no_yellow['signal'], cmap='RdYlGn')
 ax[1].set_xlabel('Date')
 ax[1].set_ylabel('Wiggle')
-ax[1].set_title(f'{crypto} Wiggle Indicator {timeframe}')
+ax[1].set_title(f'{crypto.upper()} Wiggle Indicator {timeframe}')
 
 # Uncomment this plot if you want to display the chart only & not trade
 # plt.show()
