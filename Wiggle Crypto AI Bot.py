@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import robin_stocks.robinhood as r
 import matplotlib.ticker as mticker
-
 from mplfinance.original_flavor import candlestick_ohlc
 
 plt.style.use('dark_background')
