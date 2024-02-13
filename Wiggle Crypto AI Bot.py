@@ -3,98 +3,89 @@ import datetime
 import numpy as np
 import pandas as pd
 import yfinance as yf
-import robin_stocks as rs
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import robin_stocks.robinhood as r
 import matplotlib.ticker as mticker
-from matplotlib.dates import date2num
+
 from mplfinance.original_flavor import candlestick_ohlc
 
+plt.style.use('dark_background')
+
 def wiggle_indicator(data, window=20, buy_threshold=0.5, sell_threshold=-0.5):
-    # calculate moving average
+    # Create a copy of the DataFrame to avoid SettingWithCopyWarning
+    data = data.copy()
+    
+    # Calculate moving average
     data['ma'] = data['Close'].rolling(window=window).mean()
 
-    # calculate wiggle value
+    # Calculate wiggle value
     data['wiggle'] = (data['Close'] - data['ma']) / data['Close'].rolling(window=window).std()
     
-    # create buy and sell signals
-    data['signal'] = np.where(data['wiggle'] > buy_threshold, 1, 0)
-    data['signal'] = np.where(data['wiggle'] < sell_threshold, -1, data['signal'])
+    # Create buy and sell signals
+    data['signal'] = np.where(data['wiggle'] > buy_threshold, 1, 
+                              np.where(data['wiggle'] < sell_threshold, -1, 0))
     
     return data
 
-# get ticker from user
-crypto = input("Enter the crypto ticker symbol: ")
-timeframe = "1m"
-ticker = crypto + "-USD"
+# Log in to Robinhood
+# r.login(username='your_email', password='your_password', expiresIn=86400, by_sms=True)
 
-# load data
-data = yf.download(ticker, interval=timeframe)
+while True:
+    crypto = input("Enter the crypto ticker symbol (or 'exit' to quit): ").upper()
+    if crypto.lower() == 'exit':
+        break
+    ticker = crypto + "-USD"
 
-# get last day data
-last_day_data = data.loc[(data.index >= (data.index[-1] - pd.DateOffset(days=1)))]
+    try:
+        data = yf.download(ticker, interval="1m")
+        if data.empty:
+            raise ValueError("Empty DataFrame")
+    except Exception as e:
+        continue
 
-# run wiggle indicator with more sensitive values
-wiggle_data = wiggle_indicator(last_day_data, window=5, buy_threshold=0.9, sell_threshold=-0.9)
+    local_timezone = pytz.timezone('Etc/GMT+7')
+    current_time = datetime.datetime.now(local_timezone)
+    start_time = current_time - datetime.timedelta(days=1)
+    
+    last_day_data = data.loc[(data.index >= start_time)]
+    
+    wiggle_data = wiggle_indicator(last_day_data, window=5, buy_threshold=0.9, sell_threshold=-0.9)
+    wiggle_data.reset_index(inplace=True)
+    wiggle_data['date'] = wiggle_data['Datetime'].apply(mdates.date2num)
+    
+    fig, ax = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    
+    candlestick_ohlc(ax[0], wiggle_data[['date', 'Open', 'High', 'Low', 'Close']].values, width=0.0005, colorup='green', colordown='red')
+    ax[0].yaxis.set_major_formatter(mticker.FormatStrFormatter('%d'))
+    ax[0].set_title(f'{crypto} Candlestick Plot')
+    ax[0].set_ylabel('Price')
+    ax[0].xaxis_date()
+    ax[0].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M', tz=local_timezone))
+    
+    wiggle_data_no_yellow = wiggle_data[wiggle_data['signal'] != 0]
+    ax[1].scatter(wiggle_data_no_yellow['date'], wiggle_data_no_yellow['wiggle'], c=wiggle_data_no_yellow['signal'], cmap='RdYlGn', marker='o')
+    ax[1].xaxis_date()
+    ax[1].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M', tz=local_timezone))
+    ax[1].set_ylabel('Wiggle')
+    ax[1].set_title(f'{crypto} Wiggle Indicator')
+    
+    ax[0].set_xlim(start_time, current_time)
+    ax[1].set_xlim(start_time, current_time)
 
-# Prepare data for wiggle plot
-wiggle_data['date'] = wiggle_data.index
-wiggle_data_ohlc = wiggle_data[['date', 'Open', 'High', 'Low', 'Close']]
-wiggle_data_ohlc = wiggle_data_ohlc.reset_index(drop=True)
-wiggle_data_ohlc['date'] = wiggle_data_ohlc['date'].map(date2num)
+    plt.setp(ax[0].get_xticklabels(), rotation=45, ha='right')
+    plt.setp(ax[1].get_xticklabels(), rotation=45, ha='right')
+    
+    # plt.show()    # Uncomment this plt.show() if you want to disable automatic trading
 
-# Set the style to dark theme
-plt.style.use('dark_background')
+    # Optional Trading Section (Commented out by default)
+    # if 1 in wiggle_data['signal'].values:
+    #      r.orders.order_buy_crypto_by_price(ticker, 1)
+    #      print(f'Placed an order to buy $1 worth of {ticker}')
+    # elif -1 in wiggle_data['signal'].values:
+    #      r.orders.order_sell_crypto_by_price(ticker, 1)
+    #      print(f'Placed an order to sell $1 worth of {ticker}')
 
-# Create subplots
-fig, ax = plt.subplots(2,1, figsize=(12,8), sharex=True)
+    plt.show()  # This ensures the chart is always shown regardless of the trading option
 
-# Set Greenwich Mean Time to +7
-gmt = pytz.timezone('Etc/GMT+7')
-
-# Candlestick plot
-candlestick_ohlc(ax[0], wiggle_data_ohlc.values, width=0.005, colorup='green', colordown='red')
-ax[0].yaxis.set_major_formatter(mticker.FormatStrFormatter('%d'))  # set y-axis formatter
-ax[0].set_title(f'{crypto.upper()} Candlestick Plot')
-ax[0].set_ylabel('Price')
-ax[0].xaxis_date()
-ax[0].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M', tz=gmt))
-ax[0].xaxis.set_major_locator(mdates.HourLocator(interval=4))
-
-start = datetime.datetime.combine(datetime.datetime.today().date(), datetime.time.min)
-end = datetime.datetime.combine(datetime.datetime.today().date(), datetime.time.max)
-
-plt.xlim(start, end)
-
-# Wiggle plot
-wiggle_data_no_yellow = wiggle_data.loc[wiggle_data['signal'] != 0]
-ax[1].scatter(wiggle_data_no_yellow.index, wiggle_data_no_yellow['wiggle'], c=wiggle_data_no_yellow['signal'], cmap='RdYlGn')
-ax[1].set_xlabel('Date')
-ax[1].set_ylabel('Wiggle')
-ax[1].set_title(f'{crypto.upper()} Wiggle Indicator {timeframe}')
-
-# Uncomment this plot if you want to display the chart only & not trade
-# plt.show()
-
-#Log in to robin_stocks
-rs.login()
-
-# get current price of stock
-current_price = rs.stocks.get_crypto(ticker)['last_trade_price']
-
-# check for buy signals and execute buy order
-if 1 in wiggle_data['signal'].values:
-    quantity = 1 / current_price
-    rs.orders.order_sell_crypto(ticker, current_price, quantity)
-    print(f'Bought {quantity} shares of {ticker} worth {1} at {current_price}')
-
-# check for sell signals and execute sell order
-elif -1 in wiggle_data['signal'].values:
-    quantity = 1 / current_price
-    rs.orders.order_sell_crypto(ticker, current_price, quantity)
-    print(f'Sold {quantity} shares of {ticker} worth {1} at {current_price}')
-
-plt.show()
-
-# logout of Robinhood account
-rs.logout()
+    # r.logout()   # Logout of Robinhood account
