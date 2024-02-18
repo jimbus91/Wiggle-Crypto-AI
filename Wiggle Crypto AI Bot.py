@@ -12,23 +12,22 @@ from mplfinance.original_flavor import candlestick_ohlc
 plt.style.use('dark_background')
 
 def wiggle_indicator(data, window=20, buy_threshold=0.5, sell_threshold=-0.5):
-    # Create a copy of the DataFrame to avoid SettingWithCopyWarning
     data = data.copy()
-    
-    # Calculate moving average
     data['ma'] = data['Close'].rolling(window=window).mean()
-
-    # Calculate wiggle value
     data['wiggle'] = (data['Close'] - data['ma']) / data['Close'].rolling(window=window).std()
-    
-    # Create buy and sell signals
     data['signal'] = np.where(data['wiggle'] > buy_threshold, 1, 
-                              np.where(data['wiggle'] < sell_threshold, -1, 0))
-    
+                     np.where(data['wiggle'] < sell_threshold, -1, 0))
     return data
 
 # Log in to Robinhood
-# r.login(username='your_email', password='your_password', expiresIn=86400, by_sms=True)
+r.login(username='email', password='password', expiresIn=86400, by_sms=True)
+
+# Get account information
+account_info = r.account.load_phoenix_account(info=None)
+
+# Get your portfolio's total value:
+buying_power = account_info['account_buying_power']['amount']
+print(f"Your buying power is: ${buying_power}")
 
 while True:
     crypto = input("Enter the crypto ticker symbol (or 'exit' to quit): ").upper()
